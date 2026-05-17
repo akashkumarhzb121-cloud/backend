@@ -57,7 +57,7 @@ backend/
 │   ├── jwt.js                  # Token creation helpers
 │   └── cloudinaryHelpers.js    # deleteImage / deleteImages
 ├── uploads/                    # Temp local (Cloudinary handles storage)
-├── .env.example
+├── .env
 ├── .gitignore
 ├── package.json
 └── server.js
