@@ -1,6 +1,7 @@
 const Contact  = require('../models/Contact');
 const AppError = require('../utils/AppError');
 const { sendResponse, getPagination, buildMeta } = require('../utils/response');
+const sendEmail = require('../utils/sendEmail');
 
 // POST /api/contact  (public)
 exports.submitContact = async (req, res, next) => {
@@ -10,6 +11,30 @@ exports.submitContact = async (req, res, next) => {
     const inquiry = await Contact.create({
       name, email, phone, message,
       ipAddress: req.ip,
+    });
+
+    // Email notification to your inbox
+    await sendEmail({
+      to: process.env.NOTIFY_EMAIL || 'modplint@gmail.com',
+      subject: 'New Contact Inquiry',
+      text:
+        `You received a new contact inquiry.\n\n` +
+        `Name: ${name}\n` +
+        `Email: ${email}\n` +
+        `Phone: ${phone || ''}\n` +
+        `IP: ${req.ip}\n\n` +
+        `Message:\n${message}\n`,
+      html:
+        `<p>You received a <b>new contact inquiry</b>.</p>` +
+        `<ul>` +
+        `<li><b>Name:</b> ${name}</li>` +
+        `<li><b>Email:</b> ${email}</li>` +
+        `<li><b>Phone:</b> ${phone || ''}</li>` +
+        `<li><b>IP:</b> ${req.ip}</li>` +
+        `</ul>` +
+        `<p><b>Message</b></p>` +
+        `<pre style="white-space:pre-wrap;">${message}</pre>`,
+      replyTo: email,
     });
 
     sendResponse(res, 201, 'Your message has been sent successfully. We will get back to you shortly.', {
@@ -67,6 +92,25 @@ exports.updateContactStatus = async (req, res, next) => {
     );
 
     if (!contact) return next(new AppError('Inquiry not found.', 404));
+
+    // Visitor notification only for the accepted/replied step
+    if (status === 'replied' || contact.status === 'replied') {
+      await sendEmail({
+        to: contact.email,
+        subject: 'Your Interior Design Inquiry Update',
+        text:
+          `Hi ${contact.name},\n\n` +
+          `Thanks for reaching out to us. Here is our reply:\n\n` +
+          `${adminNotes || contact.adminNotes || '(No reply message provided by admin)'}\n\n` +
+          `— Interior Design Team`,
+        html:
+          `<p>Hi <b>${contact.name}</b>,</p>` +
+          `<p>Thanks for reaching out to us. Here is our reply:</p>` +
+          `<pre style="white-space:pre-wrap;">${adminNotes || contact.adminNotes || '(No reply message provided by admin)'}</pre>` +
+          `<p>— Interior Design Team</p>`,
+      });
+    }
+
     sendResponse(res, 200, 'Inquiry updated successfully', contact);
   } catch (err) {
     next(err);
