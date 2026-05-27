@@ -19,7 +19,7 @@ const app = express();
 // ─────────────────────────────────────────────
 const allowedOrigins = process.env.CLIENT_URL
   ? process.env.CLIENT_URL.split(',').map((o) => o.trim())
-  : ['http://localhost:3000'];
+  : ['http://localhost:3000', 'https://interiordesign15.vercel.app'];
 
 app.use(
   cors({
@@ -67,11 +67,31 @@ app.use('/api/bookings',     require('./routes/bookingRoutes'));
 app.use('/api/testimonials', require('./routes/testimonialRoutes'));
 
 // ─────────────────────────────────────────────
+// Root route (prevents Vercel probe hitting `/` and returning 404)
+// ─────────────────────────────────────────────
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Interior Design API is running',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      projects: '/api/projects',
+      services: '/api/services',
+      contact: '/api/contact',
+      bookings: '/api/bookings',
+      testimonials: '/api/testimonials',
+    },
+  });
+});
+
+// ─────────────────────────────────────────────
 // 404 — Unmatched Routes
 // ─────────────────────────────────────────────
 app.all('*', (req, _res, next) => {
   next(new AppError(`Route ${req.originalUrl} not found on this server.`, 404));
 });
+
 
 // ─────────────────────────────────────────────
 // Global Error Handler
@@ -85,6 +105,10 @@ const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });
+
+// Export useful value for tests / scripts (non-breaking)
+app.locals = { server };
+
 
 // Handle unhandled promise rejections (e.g. DB connection drop)
 process.on('unhandledRejection', (err) => {
