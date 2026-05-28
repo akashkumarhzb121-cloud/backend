@@ -6,22 +6,23 @@ const sendEmail = require('../utils/sendEmail');
 // POST /api/contact  (public)
 exports.submitContact = async (req, res, next) => {
   try {
-    const { name, email, phone, message } = req.body;
+    const { name, email, phone, subject, message } = req.body;
 
     const inquiry = await Contact.create({
-      name, email, phone, message,
+      name, email, phone, subject, message,
       ipAddress: req.ip,
     });
 
     // Email notification to your inbox
     await sendEmail({
       to: process.env.NOTIFY_EMAIL || 'modplint@gmail.com',
-      subject: 'New Contact Inquiry',
+      subject: subject ? `New Contact Inquiry: ${subject}` : 'New Contact Inquiry',
       text:
         `You received a new contact inquiry.\n\n` +
         `Name: ${name}\n` +
         `Email: ${email}\n` +
         `Phone: ${phone || ''}\n` +
+        `Subject: ${subject || ''}\n` +
         `IP: ${req.ip}\n\n` +
         `Message:\n${message}\n`,
       html:
@@ -30,6 +31,7 @@ exports.submitContact = async (req, res, next) => {
         `<li><b>Name:</b> ${name}</li>` +
         `<li><b>Email:</b> ${email}</li>` +
         `<li><b>Phone:</b> ${phone || ''}</li>` +
+        `<li><b>Subject:</b> ${subject || ''}</li>` +
         `<li><b>IP:</b> ${req.ip}</li>` +
         `</ul>` +
         `<p><b>Message</b></p>` +
@@ -49,7 +51,6 @@ exports.submitContact = async (req, res, next) => {
 exports.getAllContacts = async (req, res, next) => {
   try {
     const { page, skip, limit } = getPagination(req.query);
-
     const filter = {};
     if (req.query.status) filter.status = req.query.status;
 
@@ -69,7 +70,7 @@ exports.getContact = async (req, res, next) => {
   try {
     const contact = await Contact.findByIdAndUpdate(
       req.params.id,
-      { $set: { status: 'read' } }, // Mark as read on open
+      { $set: { status: 'read' } },
       { new: true }
     ).select('-__v');
 
@@ -93,7 +94,6 @@ exports.updateContactStatus = async (req, res, next) => {
 
     if (!contact) return next(new AppError('Inquiry not found.', 404));
 
-    // Visitor notification only for the accepted/replied step
     if (status === 'replied' || contact.status === 'replied') {
       await sendEmail({
         to: contact.email,
