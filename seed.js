@@ -17,7 +17,7 @@ dotenv.config();
 // ─── Admin credentials — change these before running ───────────────────────
 const ADMIN_NAME     = 'Modplint Admin';
 const ADMIN_EMAIL    = 'modplint@gmail.com';  // your email
-const ADMIN_PASSWORD = 'nandu@123';       // change to a strong password
+const ADMIN_PASSWORD = 'nandu@12345';       // change to a strong password
 const ADMIN_ROLE     = 'superadmin';
 // ───────────────────────────────────────────────────────────────────────────
 
