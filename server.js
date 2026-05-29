@@ -19,7 +19,12 @@ const app = express();
 // ─────────────────────────────────────────────
 const allowedOrigins = process.env.CLIENT_URL
   ? process.env.CLIENT_URL.split(',').map((o) => o.trim())
-  : ['http://localhost:3000', 'https://interiordesign15.vercel.app'];
+  : [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://interiordesign15.vercel.app',
+      'https://modplint.vercel.app',
+    ];
 
 app.use(
   cors({
@@ -92,7 +97,6 @@ app.all('*', (req, _res, next) => {
   next(new AppError(`Route ${req.originalUrl} not found on this server.`, 404));
 });
 
-
 // ─────────────────────────────────────────────
 // Global Error Handler
 // ─────────────────────────────────────────────
@@ -106,9 +110,7 @@ const server = app.listen(PORT, () => {
   console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });
 
-// Export useful value for tests / scripts (non-breaking)
 app.locals = { server };
-
 
 // Handle unhandled promise rejections (e.g. DB connection drop)
 process.on('unhandledRejection', (err) => {
