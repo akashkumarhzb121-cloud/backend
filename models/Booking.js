@@ -32,8 +32,6 @@ const bookingSchema = new mongoose.Schema(
     projectType: {
       type: String,
       required: [true, 'Project type is required'],
-      // Route sanitizer normalizes to Title Case before saving,
-      // so the enum stays Title Case only.
       enum: {
         values: ['Residential', 'Commercial', 'Office', 'Hospitality', 'Retail', 'Other'],
         message: 'Invalid project type: {VALUE}',
@@ -42,7 +40,7 @@ const bookingSchema = new mongoose.Schema(
     budget: {
       type: String,
       enum: {
-        values: ['Under $10k', '$10k–$25k', '$25k–$50k', '$50k–$100k', '$100k+', 'Not sure'],
+        values: ['Under 10k', '10k–25k', '25k–50k', '50k–100k', '100k+', 'Not sure'],
         message: 'Invalid budget range: {VALUE}',
       },
       default: 'Not sure',
