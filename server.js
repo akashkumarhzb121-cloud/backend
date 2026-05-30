@@ -70,6 +70,7 @@ app.use('/api/services',     require('./routes/serviceRoutes'));
 app.use('/api/contact',      require('./routes/contactRoutes'));
 app.use('/api/bookings',     require('./routes/bookingRoutes'));
 app.use('/api/testimonials', require('./routes/testimonialRoutes'));
+app.use('/api/payments', require('./routes/paymentRoutes'));
 
 // ─────────────────────────────────────────────
 // Root route (prevents Vercel probe hitting `/` and returning 404)
