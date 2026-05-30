@@ -11,53 +11,26 @@ const router = express.Router();
 const VALID_PROJECT_TYPES = ['Residential', 'Commercial', 'Office', 'Hospitality', 'Retail', 'Other'];
 
 const bookingValidation = [
-  body('name')
-    .trim()
-    .notEmpty()
-    .withMessage('Name is required'),
-
-  body('email')
-    .isEmail()
-    .withMessage('Please provide a valid email')
-    .normalizeEmail(),
-
-  body('phone')
-    .trim()
-    .notEmpty()
-    .withMessage('Phone number is required'),
-
-  body('date')
-    .isISO8601()
-    .withMessage('Please provide a valid date')
-    .toDate(),
-
-  body('time')
-    .trim()
-    .notEmpty()
-    .withMessage('Preferred time is required'),
-
+  body('name').trim().notEmpty().withMessage('Name is required'),
+  body('email').isEmail().withMessage('Please provide a valid email').normalizeEmail(),
+  body('phone').trim().notEmpty().withMessage('Phone number is required'),
+  body('date').isISO8601().withMessage('Please provide a valid date').toDate(),
+  body('time').trim().notEmpty().withMessage('Preferred time is required'),
   body('projectType')
     .trim()
     .notEmpty()
     .withMessage('Project type is required')
-    // Normalize to Title Case so "residential" → "Residential" etc.
     .customSanitizer((val) => {
       if (!val) return val;
       return val.charAt(0).toUpperCase() + val.slice(1).toLowerCase();
     })
     .isIn(VALID_PROJECT_TYPES)
     .withMessage(`Project type must be one of: ${VALID_PROJECT_TYPES.join(', ')}`),
-
   body('budget')
     .optional()
-    .isIn(['Under $10k', '$10k–$25k', '$25k–$50k', '$50k–$100k', '$100k+', 'Not sure'])
+    .isIn(['Under 10k', '10k–25k', '25k–50k', '50k–100k', '100k+', 'Not sure'])
     .withMessage('Invalid budget range'),
-
-  body('message')
-    .optional()
-    .trim()
-    .isLength({ max: 2000 })
-    .withMessage('Message cannot exceed 2000 characters'),
+  body('message').optional().trim().isLength({ max: 2000 }).withMessage('Message cannot exceed 2000 characters'),
 ];
 
 // Public — rate-limited
