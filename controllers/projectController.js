@@ -6,8 +6,6 @@ const { deleteImages } = require('../utils/cloudinaryHelpers');
 // GET /api/projects
 exports.getAllProjects = async (req, res, next) => {
   try {
-    const { page, skip, limit } = getPagination(req.query);
-
     // Build filter
     const filter = {};
     if (req.query.category)   filter.category    = req.query.category;
@@ -24,16 +22,28 @@ exports.getAllProjects = async (req, res, next) => {
       filter.$text = { $search: req.query.search };
     }
 
-    const [projects, total] = await Promise.all([
-      Project.find(filter)
-        .sort(req.query.search ? { score: { $meta: 'textScore' } } : { createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .select('-__v'),
-      Project.countDocuments(filter),
-    ]);
+    // FIX: If no explicit pagination params, return ALL projects (no limit)
+    // This fixes the "only 10 projects showing" issue caused by getPagination defaultLimit=10
+    if (req.query.page || req.query.limit) {
+      // Paginated request — respect page/limit params
+      const { page, skip, limit } = getPagination(req.query);
+      const [projects, total] = await Promise.all([
+        Project.find(filter)
+          .sort(req.query.search ? { score: { $meta: 'textScore' } } : { createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .select('-__v'),
+        Project.countDocuments(filter),
+      ]);
+      return sendResponse(res, 200, 'Projects fetched successfully', projects, buildMeta(page, limit, total));
+    }
 
-    sendResponse(res, 200, 'Projects fetched successfully', projects, buildMeta(page, limit, total));
+    // No pagination params — return all projects
+    const projects = await Project.find(filter)
+      .sort(req.query.search ? { score: { $meta: 'textScore' } } : { createdAt: -1 })
+      .select('-__v');
+
+    sendResponse(res, 200, 'Projects fetched successfully', projects);
   } catch (err) {
     next(err);
   }
