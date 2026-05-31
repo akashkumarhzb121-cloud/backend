@@ -27,7 +27,7 @@ router.use(protect, restrictTo('admin', 'superadmin'));
 
 router.post(
   '/',
-  upload.array('images', 10), // up to 10 images
+  upload.array('images'),   // FIX: removed the 10-image cap → unlimited
   projectValidation,
   validate,
   projectController.createProject
@@ -35,7 +35,7 @@ router.post(
 
 router.put(
   '/:id',
-  upload.array('images', 10),
+  upload.array('images'),   // FIX: removed the 10-image cap → unlimited
   validate,
   projectController.updateProject
 );
