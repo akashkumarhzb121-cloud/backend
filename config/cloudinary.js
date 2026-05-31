@@ -21,7 +21,7 @@ const createUploader = (folder) => {
 
   return multer({
     storage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per file
+    limits: { fileSize: 150 * 1024 * 1024 }, // FIX: raised from 10MB → 150MB per file
     fileFilter: (_req, file, cb) => {
       if (file.mimetype.startsWith('image/')) {
         cb(null, true);
