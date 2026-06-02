@@ -1,28 +1,18 @@
 const Testimonial = require('../models/Testimonial');
 const AppError    = require('../utils/AppError');
 const { sendResponse, getPagination, buildMeta } = require('../utils/response');
-const { deleteImage } = require('../utils/cloudinaryHelpers');
+const { deleteImage, deleteImages } = require('../utils/cloudinaryHelpers');
 
-// GET /api/testimonials
-// Public (no token)  → approved only, all of them
-// Admin  (with token) → ALL records including pending — req.user set by optionalAuth
 exports.getAllTestimonials = async (req, res, next) => {
   try {
     const filter = {};
-
     if (!req.user) {
-      // Public visitor — only show approved
       filter.isApproved = true;
     } else if (req.query.approved !== undefined) {
-      // Admin passed explicit ?approved=true/false filter
       filter.isApproved = req.query.approved === 'true';
     }
-    // Admin with no filter → no isApproved constraint → returns ALL
-
     if (req.query.featured) filter.isFeatured = req.query.featured === 'true';
 
-    // FIX: only paginate when caller explicitly passes ?page or ?limit
-    // Without those params (normal page loads) return every record — no 10-item cap
     if (req.query.page || req.query.limit) {
       const { page, skip, limit } = getPagination(req.query);
       const [testimonials, total] = await Promise.all([
@@ -34,89 +24,102 @@ exports.getAllTestimonials = async (req, res, next) => {
 
     const testimonials = await Testimonial.find(filter).sort({ createdAt: -1 }).select('-__v');
     sendResponse(res, 200, 'Testimonials fetched successfully', testimonials);
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
-// GET /api/testimonials/:id
 exports.getTestimonial = async (req, res, next) => {
   try {
     const testimonial = await Testimonial.findById(req.params.id).select('-__v');
     if (!testimonial) return next(new AppError('Testimonial not found.', 404));
     sendResponse(res, 200, 'Testimonial fetched successfully', testimonial);
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
-// POST /api/testimonials  (public — website visitor submits a review)
-// Saved as isApproved: false — admin must approve it before it shows publicly
+// Public review submission — allows multiple images/videos
 exports.createTestimonial = async (req, res, next) => {
   try {
     const { name, profession, review, rating, project } = req.body;
+    const files = req.files || (req.file ? [req.file] : []);
 
-    const image = req.file
-      ? { url: req.file.path, publicId: req.file.filename }
+    const media = files.map(file => ({
+      url:          file.path,
+      publicId:     file.filename,
+      resourceType: file.mimetype.startsWith('video/') ? 'video' : 'image',
+    }));
+
+    // Legacy single image field — first image
+    const firstImage = files.find(f => f.mimetype.startsWith('image/'));
+    const image = firstImage
+      ? { url: firstImage.path, publicId: firstImage.filename }
       : { url: null, publicId: null };
 
     const testimonial = await Testimonial.create({
-      name,
-      profession: profession || '',
-      review,
-      rating:     Number(rating),
-      image,
-      project:    project || null,
+      name, profession: profession || '', review,
+      rating: Number(rating), image, media,
+      project: project || null,
       isApproved: false,
     });
 
-    sendResponse(res, 201, 'Thank you! Your testimonial has been submitted and is pending review.', {
-      id: testimonial._id,
-    });
-  } catch (err) {
-    next(err);
-  }
+    sendResponse(res, 201, 'Thank you! Your testimonial has been submitted and is pending review.', { id: testimonial._id });
+  } catch (err) { next(err); }
 };
 
-// POST /api/testimonials/admin-create  (admin only)
-// FIX: admin-created testimonials go live immediately with isApproved: true
+// Admin create — live immediately
 exports.createTestimonialAsAdmin = async (req, res, next) => {
   try {
     const { name, profession, review, rating, project } = req.body;
+    const files = req.files || (req.file ? [req.file] : []);
 
-    const image = req.file
-      ? { url: req.file.path, publicId: req.file.filename }
+    const media = files.map(file => ({
+      url:          file.path,
+      publicId:     file.filename,
+      resourceType: file.mimetype.startsWith('video/') ? 'video' : 'image',
+    }));
+
+    const firstImage = files.find(f => f.mimetype.startsWith('image/'));
+    const image = firstImage
+      ? { url: firstImage.path, publicId: firstImage.filename }
       : { url: null, publicId: null };
 
     const testimonial = await Testimonial.create({
-      name,
-      profession: profession || '',
-      review,
-      rating:     Number(rating),
-      image,
-      project:    project || null,
-      isApproved: true,  // immediately live on the website
+      name, profession: profession || '', review,
+      rating: Number(rating), image, media,
+      project: project || null,
+      isApproved: true,
     });
 
     sendResponse(res, 201, 'Testimonial created and published successfully.', testimonial);
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
-// PUT /api/testimonials/:id  (admin)
 exports.updateTestimonial = async (req, res, next) => {
   try {
     const testimonial = await Testimonial.findById(req.params.id);
     if (!testimonial) return next(new AppError('Testimonial not found.', 404));
 
-    const { name, profession, review, rating, isApproved, isFeatured } = req.body;
+    const { name, profession, review, rating, isApproved, isFeatured, removeMedia } = req.body;
+    const files = req.files || (req.file ? [req.file] : []);
 
-    let image = testimonial.image;
-    if (req.file) {
-      if (testimonial.image?.publicId) await deleteImage(testimonial.image.publicId);
-      image = { url: req.file.path, publicId: req.file.filename };
+    // Handle media removal
+    let existingMedia = testimonial.media || [];
+    if (removeMedia) {
+      const toRemove = Array.isArray(removeMedia) ? removeMedia : [removeMedia];
+      await deleteImages(toRemove);
+      existingMedia = existingMedia.filter(m => !toRemove.includes(m.publicId));
     }
+
+    const newMedia = files.map(file => ({
+      url:          file.path,
+      publicId:     file.filename,
+      resourceType: file.mimetype.startsWith('video/') ? 'video' : 'image',
+    }));
+
+    const allMedia = [...existingMedia, ...newMedia];
+
+    const firstImage = allMedia.find(m => m.resourceType === 'image') || testimonial.image;
+    const image = firstImage
+      ? { url: firstImage.url, publicId: firstImage.publicId }
+      : testimonial.image;
 
     const updated = await Testimonial.findByIdAndUpdate(
       req.params.id,
@@ -128,27 +131,22 @@ exports.updateTestimonial = async (req, res, next) => {
         ...(isApproved !== undefined && { isApproved: isApproved === 'true' || isApproved === true }),
         ...(isFeatured !== undefined && { isFeatured: isFeatured === 'true' || isFeatured === true }),
         image,
+        media: allMedia,
       },
       { new: true, runValidators: true }
     );
 
     sendResponse(res, 200, 'Testimonial updated successfully', updated);
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
-// DELETE /api/testimonials/:id  (admin)
 exports.deleteTestimonial = async (req, res, next) => {
   try {
     const testimonial = await Testimonial.findById(req.params.id);
     if (!testimonial) return next(new AppError('Testimonial not found.', 404));
-
     if (testimonial.image?.publicId) await deleteImage(testimonial.image.publicId);
+    await deleteImages((testimonial.media || []).map(m => m.publicId));
     await testimonial.deleteOne();
-
     sendResponse(res, 200, 'Testimonial deleted successfully');
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
