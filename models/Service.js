@@ -1,5 +1,12 @@
 const mongoose = require('mongoose');
 
+const mediaSchema = {
+  url:          { type: String, default: null },
+  publicId:     { type: String, default: null },
+  resourceType: { type: String, enum: ['image', 'video'], default: 'image' },
+  caption:      { type: String, default: '' },
+};
+
 const serviceSchema = new mongoose.Schema(
   {
     title: {
@@ -13,10 +20,13 @@ const serviceSchema = new mongoose.Schema(
       required: [true, 'Description is required'],
       trim: true,
     },
+    // Primary single image (legacy compat)
     image: {
       url:      { type: String, default: null },
       publicId: { type: String, default: null },
     },
+    // Multiple images & videos (new)
+    media: [mediaSchema],
     pricing: {
       type: {
         type: String,
@@ -24,18 +34,12 @@ const serviceSchema = new mongoose.Schema(
         default: 'contact',
       },
       amount:   { type: Number, default: null },
-      currency: { type: String, default: 'USD' },
+      currency: { type: String, default: 'INR' },
       note:     { type: String, default: '' },
     },
     features: [{ type: String, trim: true }],
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    order: {
-      type: Number,
-      default: 0, // for manual sorting on the frontend
-    },
+    isActive: { type: Boolean, default: true },
+    order:    { type: Number, default: 0 },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
