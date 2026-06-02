@@ -1,6 +1,7 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const sendEmail = require('../utils/sendEmail');
+const { paymentConfirmedEmail, paymentAdminEmail } = require('../utils/emailTemplates/paymentEmail');
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -10,20 +11,16 @@ const razorpay = new Razorpay({
 exports.createOrder = async (req, res) => {
   try {
     const { amount, serviceName } = req.body;
-
     if (!amount || !serviceName) {
       return res.status(400).json({ success: false, message: 'amount and serviceName are required' });
     }
-
     const options = {
-      amount: Math.round(Number(amount) * 100), // paise
+      amount: Math.round(Number(amount) * 100),
       currency: 'INR',
       receipt: `receipt_${Date.now()}`,
       notes: { serviceName },
     };
-
     const order = await razorpay.orders.create(options);
-
     res.status(200).json({ success: true, order });
   } catch (error) {
     console.error('Error creating Razorpay order:', error);
@@ -34,13 +31,8 @@ exports.createOrder = async (req, res) => {
 exports.verifyPayment = async (req, res) => {
   try {
     const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      customerName,
-      customerEmail,
-      serviceName,
-      amount,
+      razorpay_order_id, razorpay_payment_id, razorpay_signature,
+      customerName, customerEmail, serviceName, amount,
     } = req.body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -58,52 +50,23 @@ exports.verifyPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid payment signature' });
     }
 
-    // Send email to admin
-    // FIX: sendEmail expects `to`, not `email`
     const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
 
-    const htmlBody = `
-      <h2 style="color:#D4AF37;">New Payment Received!</h2>
-      <table style="border-collapse:collapse;width:100%;font-family:sans-serif;">
-        <tr><td style="padding:8px;font-weight:bold;">Service</td><td style="padding:8px;">${serviceName}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold;">Amount</td><td style="padding:8px;">₹${amount}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold;">Customer</td><td style="padding:8px;">${customerName}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold;">Email</td><td style="padding:8px;">${customerEmail}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold;">Payment ID</td><td style="padding:8px;">${razorpay_payment_id}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold;">Order ID</td><td style="padding:8px;">${razorpay_order_id}</td></tr>
-      </table>
-    `;
-
-    const textBody = `
-New Payment Received!
-
-Service: ${serviceName}
-Amount: ₹${amount}
-Customer: ${customerName} (${customerEmail})
-Payment ID: ${razorpay_payment_id}
-Order ID: ${razorpay_order_id}
-    `;
-
+    // Admin notification
     await sendEmail({
-      to: adminEmail,           // FIX: was `email:` — sendEmail utility expects `to:`
-      subject: `New Payment Received – ${serviceName} (₹${amount})`,
-      text: textBody,
-      html: htmlBody,
+      to: adminEmail,
+      subject: `💰 New Payment Received — ${serviceName} (₹${amount})`,
+      text: `New payment of ₹${amount} from ${customerName} (${customerEmail}) for ${serviceName}. Payment ID: ${razorpay_payment_id}`,
+      html: paymentAdminEmail({ customerName, customerEmail, amount, serviceName, paymentId: razorpay_payment_id, orderId: razorpay_order_id }),
     });
 
-    // Also send confirmation to customer
+    // Customer confirmation
     if (customerEmail) {
       await sendEmail({
         to: customerEmail,
-        subject: 'Payment Confirmed – Modplint Interiors',
-        text: `Hi ${customerName},\n\nThank you for your payment of ₹${amount} for ${serviceName}.\nWe will contact you shortly.\n\nWarm regards,\nModplint Interiors`,
-        html: `
-          <h2 style="color:#D4AF37;">Payment Confirmed!</h2>
-          <p>Hi <strong>${customerName}</strong>,</p>
-          <p>Thank you for your payment of <strong>₹${amount}</strong> for <strong>${serviceName}</strong>.</p>
-          <p>Our team will get in touch with you shortly.</p>
-          <p>Warm regards,<br/><strong>Modplint Interiors</strong></p>
-        `,
+        subject: `Payment Confirmed – ${serviceName} | Modplint Interiors`,
+        text: `Hi ${customerName}, thank you for your payment of ₹${amount} for ${serviceName}. Our team will contact you shortly.\n\nWarm regards,\nModplint Interiors`,
+        html: paymentConfirmedEmail({ customerName, amount, serviceName, paymentId: razorpay_payment_id, orderId: razorpay_order_id }),
       });
     }
 
