@@ -8,25 +8,41 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Reusable factory — call with a Cloudinary folder name
-const createUploader = (folder) => {
+/**
+ * Creates a multer/cloudinary uploader for a given folder.
+ *
+ * Changes vs original:
+ * - Accepts images AND videos (mp4, mov, avi, webm, mkv)
+ * - No MP resolution gate — any file size/resolution is accepted
+ * - File size limit raised to 500 MB (supports 4K stock footage)
+ * - Videos are uploaded as resource_type: 'auto' so Cloudinary auto-detects
+ */
+const createUploader = (folder, { multiFile = false } = {}) => {
   const storage = new CloudinaryStorage({
     cloudinary,
-    params: {
-      folder: `interior-design/${folder}`,
-      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-      transformation: [{ width: 1920, height: 1080, crop: 'limit', quality: 'auto' }],
+    params: async (_req, file) => {
+      const isVideo = file.mimetype.startsWith('video/');
+      return {
+        folder:           `interior-design/${folder}`,
+        resource_type:    'auto',           // handles both image and video
+        allowed_formats:  ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'mov', 'avi', 'webm', 'mkv'],
+        // Only transform images; let videos pass through as-is
+        ...(isVideo ? {} : {
+          transformation: [{ width: 3840, height: 2160, crop: 'limit', quality: 'auto:best' }],
+        }),
+      };
     },
   });
 
   return multer({
     storage,
-    limits: { fileSize: 150 * 1024 * 1024 }, // FIX: raised from 10MB → 150MB per file
+    limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB — handles 4K stock footage
     fileFilter: (_req, file, cb) => {
-      if (file.mimetype.startsWith('image/')) {
+      const allowed = /^(image|video)\//;
+      if (allowed.test(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(new Error('Only image files are allowed'), false);
+        cb(new Error('Only image and video files are allowed'), false);
       }
     },
   });
