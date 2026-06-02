@@ -2,7 +2,6 @@ const express = require('express');
 const { body } = require('express-validator');
 const jwt  = require('jsonwebtoken');
 const User = require('../models/User');
-
 const testimonialController = require('../controllers/testimonialController');
 const { protect, restrictTo } = require('../middleware/auth');
 const validate               = require('../middleware/validate');
@@ -18,11 +17,6 @@ const testimonialValidation = [
   body('rating').isInt({ min: 1, max: 5 }).withMessage('Rating must be between 1 and 5'),
 ];
 
-// ─── optionalAuth ─────────────────────────────────────────────────────────────
-// Attaches req.user if a valid Bearer token is present — never blocks the request.
-// This lets GET /testimonials return:
-//   - approved-only  to the public  (no token)
-//   - ALL records    to admins      (valid token)
 const optionalAuth = async (req, _res, next) => {
   try {
     let token;
@@ -36,42 +30,36 @@ const optionalAuth = async (req, _res, next) => {
       const user    = await User.findById(decoded.id).select('+isActive +role');
       if (user && user.isActive) req.user = user;
     }
-  } catch {
-    // expired / invalid token — silently ignore, treat as unauthenticated
-  }
+  } catch { /* expired/invalid — treat as unauthenticated */ }
   next();
 };
 
-// ─── Public routes ────────────────────────────────────────────────────────────
-
-// FIX: optionalAuth added — admin token now reaches req.user in controller
-// Public visitors: only approved shown | Admin: all (pending + approved) shown
+// Public
 router.get('/',    optionalAuth, testimonialController.getAllTestimonials);
 router.get('/:id', testimonialController.getTestimonial);
 
-// User-submitted review — saves with isApproved: false, waits for admin approval
+// Public review submission — multiple images/videos allowed
 router.post(
   '/',
   generalRateLimiter,
-  upload.single('image'),
+  upload.array('media'),      // field name 'media' — supports images & videos
   testimonialValidation,
   validate,
   testimonialController.createTestimonial
 );
 
-// ─── Admin-only routes ────────────────────────────────────────────────────────
+// Admin-only
 router.use(protect, restrictTo('admin', 'superadmin'));
 
-// FIX: separate admin creation route — saves with isApproved: true (live immediately)
 router.post(
   '/admin-create',
-  upload.single('image'),
+  upload.array('media'),
   testimonialValidation,
   validate,
   testimonialController.createTestimonialAsAdmin
 );
 
-router.put('/:id',    upload.single('image'), validate, testimonialController.updateTestimonial);
+router.put('/:id',    upload.array('media'), validate, testimonialController.updateTestimonial);
 router.delete('/:id', testimonialController.deleteTestimonial);
 
 module.exports = router;
