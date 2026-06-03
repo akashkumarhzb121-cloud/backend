@@ -8,29 +8,33 @@ const AppError     = require('./utils/AppError');
 
 // Load env variables FIRST
 dotenv.config();
-
 // Connect to MongoDB
 connectDB();
 
 const app = express();
 
-// ─────────────────────────────────────────────
-// CORS
-// ─────────────────────────────────────────────
+// ─── CORS ─────────────────────────────────────────────────────────────────
+// Hard-coded fallback origins. Override at runtime via CLIENT_URL env var
+// (comma-separated list, e.g. "https://www.modplintinteriors.com,https://modplintinteriors.com")
+const FALLBACK_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  // Custom domain — both www and apex
+  'https://modplintinteriors.com',
+  'https://www.modplintinteriors.com',
+  // Vercel preview / old deployments
+  'https://interiordesign15.vercel.app',
+  'https://modplint.vercel.app',
+];
+
 const allowedOrigins = process.env.CLIENT_URL
   ? process.env.CLIENT_URL.split(',').map((o) => o.trim())
-  : [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'https://interiordesign15.vercel.app',
-      'https://modplint.vercel.app',
-      'https://www.modplintinteriors.com',
-    ];
+  : FALLBACK_ORIGINS;
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps, Postman)
+      // Allow requests with no origin (Postman, mobile apps, curl)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -43,16 +47,12 @@ app.use(
   })
 );
 
-// ─────────────────────────────────────────────
-// Body Parsing
-// ─────────────────────────────────────────────
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// ─── Body Parsing ──────────────────────────────────────────────────────────
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 
-// ─────────────────────────────────────────────
-// Health Check
-// ─────────────────────────────────────────────
+// ─── Health Check ──────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.status(200).json({
     success: true,
@@ -62,24 +62,21 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// ─────────────────────────────────────────────
-// API Routes
-// ─────────────────────────────────────────────
+// ─── API Routes ────────────────────────────────────────────────────────────
 app.use('/api/auth',         require('./routes/authRoutes'));
 app.use('/api/projects',     require('./routes/projectRoutes'));
 app.use('/api/services',     require('./routes/serviceRoutes'));
 app.use('/api/contact',      require('./routes/contactRoutes'));
 app.use('/api/bookings',     require('./routes/bookingRoutes'));
 app.use('/api/testimonials', require('./routes/testimonialRoutes'));
-app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/payments',     require('./routes/paymentRoutes'));
 
-// ─────────────────────────────────────────────
-// Root route (prevents Vercel probe hitting `/` and returning 404)
-// ─────────────────────────────────────────────
+// ─── Root ──────────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
   res.status(200).json({
     success: true,
-    message: 'Interior Design API is running',
+    message: 'Modplint Interiors API is running',
+    domain: 'https://www.modplintinteriors.com',
     endpoints: {
       health: '/health',
       auth: '/api/auth',
@@ -92,21 +89,15 @@ app.get('/', (_req, res) => {
   });
 });
 
-// ─────────────────────────────────────────────
-// 404 — Unmatched Routes
-// ─────────────────────────────────────────────
+// ─── 404 ───────────────────────────────────────────────────────────────────
 app.all('*', (req, _res, next) => {
   next(new AppError(`Route ${req.originalUrl} not found on this server.`, 404));
 });
 
-// ─────────────────────────────────────────────
-// Global Error Handler
-// ─────────────────────────────────────────────
+// ─── Global Error Handler ──────────────────────────────────────────────────
 app.use(errorHandler);
 
-// ─────────────────────────────────────────────
-// Start Server
-// ─────────────────────────────────────────────
+// ─── Start ─────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
@@ -114,13 +105,11 @@ const server = app.listen(PORT, () => {
 
 app.locals = { server };
 
-// Handle unhandled promise rejections (e.g. DB connection drop)
 process.on('unhandledRejection', (err) => {
   console.error('💥 Unhandled Rejection:', err.name, err.message);
   server.close(() => process.exit(1));
 });
 
-// Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('💥 Uncaught Exception:', err.name, err.message);
   process.exit(1);
