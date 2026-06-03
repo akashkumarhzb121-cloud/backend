@@ -24,6 +24,7 @@ const allowedOrigins = process.env.CLIENT_URL
       'http://localhost:5173',
       'https://interiordesign15.vercel.app',
       'https://modplint.vercel.app',
+      'https://www.modplintinteriors.com',
     ];
 
 app.use(
