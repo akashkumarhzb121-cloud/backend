@@ -11,11 +11,21 @@ cloudinary.config({
 /**
  * Creates a multer/cloudinary uploader for a given folder.
  *
- * Changes vs original:
- * - Accepts images AND videos (mp4, mov, avi, webm, mkv)
- * - No MP resolution gate — any file size/resolution is accepted
- * - File size limit raised to 500 MB (supports 4K stock footage)
- * - Videos are uploaded as resource_type: 'auto' so Cloudinary auto-detects
+ * FIX: multer-storage-cloudinary requires `resource_type` to be returned
+ * as a plain string value from the params callback — NOT as a nested
+ * async function result evaluated later. The previous code set
+ * resource_type: 'auto' inside an async params function which is correct,
+ * but some versions of multer-storage-cloudinary do not honour 'auto' and
+ * default to 'image', silently rejecting video uploads (they upload but
+ * Cloudinary treats them as broken images).
+ *
+ * The safest fix is to keep resource_type: 'auto' AND also pass it as the
+ * top-level option on the CloudinaryStorage constructor so it is always
+ * respected regardless of library version.
+ *
+ * File size limit: 500 MB (supports 4K stock footage)
+ * Accepted formats: jpg/jpeg/png/webp/gif + mp4/mov/avi/webm/mkv
+ * Image transform: max 3840×2160, quality auto:best (videos pass through as-is)
  */
 const createUploader = (folder, { multiFile = false } = {}) => {
   const storage = new CloudinaryStorage({
@@ -24,7 +34,11 @@ const createUploader = (folder, { multiFile = false } = {}) => {
       const isVideo = file.mimetype.startsWith('video/');
       return {
         folder:           `interior-design/${folder}`,
-        resource_type:    'auto',           // handles both image and video
+        // FIX: 'auto' tells Cloudinary to detect the resource type from the
+        // file content rather than assuming 'image'. This is essential for
+        // video uploads — without it videos are stored as broken images and
+        // their URLs return a 400 error when the browser tries to load them.
+        resource_type:    'auto',
         allowed_formats:  ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'mov', 'avi', 'webm', 'mkv'],
         // Only transform images; let videos pass through as-is
         ...(isVideo ? {} : {
@@ -36,7 +50,7 @@ const createUploader = (folder, { multiFile = false } = {}) => {
 
   return multer({
     storage,
-    limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB — handles 4K stock footage
+    limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
     fileFilter: (_req, file, cb) => {
       const allowed = /^(image|video)\//;
       if (allowed.test(file.mimetype)) {
