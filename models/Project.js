@@ -19,51 +19,33 @@ const projectSchema = new mongoose.Schema(
       enum: ['Residential', 'Commercial', 'Office', 'Hospitality', 'Retail', 'Other'],
       default: 'Residential',
     },
-    location: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    budget: {
-      type: Number,
-      min: [0, 'Budget cannot be negative'],
-      default: null,
-    },
-    completionDate: {
-      type: Date,
-      default: null,
-    },
+    location:       { type: String, trim: true, default: '' },
+    budget:         { type: Number, min: [0, 'Budget cannot be negative'], default: null },
+    completionDate: { type: Date, default: null },
+
+    // Supports both images AND videos — resourceType distinguishes them
     images: [
       {
-        url:       { type: String, required: true },
-        publicId:  { type: String, required: true }, // Cloudinary public_id for deletion
-        caption:   { type: String, default: '' },
+        url:          { type: String, required: true },
+        publicId:     { type: String, required: true },
+        resourceType: { type: String, enum: ['image', 'video'], default: 'image' },
+        caption:      { type: String, default: '' },
       },
     ],
-    featured: {
-      type: Boolean,
-      default: false,
-    },
-    isPublished: {
-      type: Boolean,
-      default: true,
-    },
-    tags: [{ type: String, trim: true }],
-    createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-    },
+
+    featured:    { type: Boolean, default: false },
+    isPublished: { type: Boolean, default: true },
+    tags:        [{ type: String, trim: true }],
+    createdBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
+    toJSON:   { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
-// Full-text search index
 projectSchema.index({ title: 'text', description: 'text', tags: 'text' });
-// Common query indexes
 projectSchema.index({ category: 1, featured: 1, isPublished: 1 });
 
 module.exports = mongoose.model('Project', projectSchema);
