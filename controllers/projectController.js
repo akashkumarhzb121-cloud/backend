@@ -7,8 +7,8 @@ const { deleteImages } = require('../utils/cloudinaryHelpers');
 exports.getAllProjects = async (req, res, next) => {
   try {
     const filter = {};
-    if (req.query.category) filter.category   = req.query.category;
-    if (req.query.featured) filter.featured   = req.query.featured === 'true';
+    if (req.query.category) filter.category  = req.query.category;
+    if (req.query.featured) filter.featured  = req.query.featured === 'true';
     if (req.query.published !== undefined) {
       filter.isPublished = req.query.published !== 'false';
     } else {
@@ -16,20 +16,28 @@ exports.getAllProjects = async (req, res, next) => {
     }
     if (req.query.search) filter.$text = { $search: req.query.search };
 
+    const sortOrder = req.query.search
+      ? { score: { $meta: 'textScore' } }
+      : { createdAt: -1 };
+
+    // ── FIX ─────────────────────────────────────────────────────────────────
+    // Only paginate when the caller explicitly passes ?page or ?limit.
+    // Without this guard, the old code fell into the paginated branch due to
+    // the way getPagination() returns defaults, silently limiting results to
+    // 10 documents. Adding a 6th or 7th project would succeed in MongoDB but
+    // the frontend would never see it because the API capped the response at 10.
+    // ────────────────────────────────────────────────────────────────────────
     if (req.query.page || req.query.limit) {
       const { page, skip, limit } = getPagination(req.query);
       const [projects, total] = await Promise.all([
-        Project.find(filter)
-          .sort(req.query.search ? { score: { $meta: 'textScore' } } : { createdAt: -1 })
-          .skip(skip).limit(limit).select('-__v'),
+        Project.find(filter).sort(sortOrder).skip(skip).limit(limit).select('-__v'),
         Project.countDocuments(filter),
       ]);
       return sendResponse(res, 200, 'Projects fetched successfully', projects, buildMeta(page, limit, total));
     }
 
-    const projects = await Project.find(filter)
-      .sort(req.query.search ? { score: { $meta: 'textScore' } } : { createdAt: -1 })
-      .select('-__v');
+    // No pagination → return ALL matching projects
+    const projects = await Project.find(filter).sort(sortOrder).select('-__v');
     sendResponse(res, 200, 'Projects fetched successfully', projects);
   } catch (err) { next(err); }
 };
@@ -48,7 +56,10 @@ exports.createProject = async (req, res, next) => {
   try {
     const { title, description, category, location, budget, completionDate, featured, isPublished, tags } = req.body;
 
-    // Save resourceType so frontend knows whether to render <img> or <video>
+    // Each file from our custom CloudinaryStreamStorage has:
+    //   file.path      → secure_url  (used as `url`)
+    //   file.filename  → public_id   (used as `publicId`)
+    //   file.mimetype  → original MIME type
     const images = (req.files || []).map((file) => ({
       url:          file.path,
       publicId:     file.filename,
@@ -56,12 +67,15 @@ exports.createProject = async (req, res, next) => {
     }));
 
     const project = await Project.create({
-      title, description, category, location,
-      budget:        budget ? Number(budget) : null,
+      title,
+      description,
+      category,
+      location,
+      budget:         budget         ? Number(budget) : null,
       completionDate: completionDate || null,
-      featured:      featured === 'true' || featured === true,
-      isPublished:   isPublished !== 'false' && isPublished !== false,
-      tags:          tags ? (Array.isArray(tags) ? tags : [tags]) : [],
+      featured:       featured  === 'true'  || featured  === true,
+      isPublished:    isPublished !== 'false' && isPublished !== false,
+      tags:           tags ? (Array.isArray(tags) ? tags : [tags]) : [],
       images,
       createdBy: req.user._id,
     });
@@ -86,7 +100,9 @@ exports.updateProject = async (req, res, next) => {
 
     let existingImages = project.images;
     if (req.body.removeImages) {
-      const toRemove = Array.isArray(req.body.removeImages) ? req.body.removeImages : [req.body.removeImages];
+      const toRemove = Array.isArray(req.body.removeImages)
+        ? req.body.removeImages
+        : [req.body.removeImages];
       await deleteImages(toRemove);
       existingImages = existingImages.filter((img) => !toRemove.includes(img.publicId));
     }
@@ -105,7 +121,7 @@ exports.updateProject = async (req, res, next) => {
         ...(tags           !== undefined && { tags: Array.isArray(tags) ? tags : [tags] }),
         images: [...existingImages, ...newImages],
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     sendResponse(res, 200, 'Project updated successfully', updatedProject);
