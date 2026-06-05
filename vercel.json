@@ -1,12 +1,11 @@
 {
   "version": 2,
-  "functions": {
-    "server.js": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 60,
-      "memory": 1024
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
     }
-  },
+  ],
   "routes": [
     {
       "src": "^/?$",
@@ -17,6 +16,7 @@
       "dest": "server.js"
     }
   ],
+
   "env": {
     "NODE_ENV": "production"
   }
