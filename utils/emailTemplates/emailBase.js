@@ -6,9 +6,9 @@
 const BRAND = {
   name: 'Modplint Interiors',
   tagline: 'Luxury Interior Design',
-  email: process.env.EMAIL_USER || 'modplint@gmail.com',
+  email: process.env.EMAIL_USER || 'modplintinteriors@gmail.com',
   website: process.env.FRONTEND_URL || 'https://modplintinteriors.com',
-  phone: process.env.CONTACT_PHONE || '+91 98765 43210',
+  phone: process.env.CONTACT_PHONE || '+91 8741072815',
   address: process.env.CONTACT_ADDRESS || 'Mumbai, Maharashtra, India',
   // Inline SVG logo – renders in all email clients without external image requests
   logoSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="140" height="40" viewBox="0 0 140 40">
