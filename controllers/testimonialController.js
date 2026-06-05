@@ -3,6 +3,7 @@ const AppError    = require('../utils/AppError');
 const { sendResponse, getPagination, buildMeta } = require('../utils/response');
 const { deleteImage, deleteImages } = require('../utils/cloudinaryHelpers');
 
+// GET /api/testimonials
 exports.getAllTestimonials = async (req, res, next) => {
   try {
     const filter = {};
@@ -13,6 +14,12 @@ exports.getAllTestimonials = async (req, res, next) => {
     }
     if (req.query.featured) filter.isFeatured = req.query.featured === 'true';
 
+    // ── FIX ─────────────────────────────────────────────────────────────────
+    // Same pagination bug as services & projects: the old code always applied
+    // getPagination() with a default limit of 10, even when the frontend sent
+    // no ?page or ?limit params. This silently capped testimonials at 10.
+    // Now we only paginate on explicit request.
+    // ────────────────────────────────────────────────────────────────────────
     if (req.query.page || req.query.limit) {
       const { page, skip, limit } = getPagination(req.query);
       const [testimonials, total] = await Promise.all([
@@ -22,11 +29,13 @@ exports.getAllTestimonials = async (req, res, next) => {
       return sendResponse(res, 200, 'Testimonials fetched successfully', testimonials, buildMeta(page, limit, total));
     }
 
+    // No pagination → return all testimonials
     const testimonials = await Testimonial.find(filter).sort({ createdAt: -1 }).select('-__v');
     sendResponse(res, 200, 'Testimonials fetched successfully', testimonials);
   } catch (err) { next(err); }
 };
 
+// GET /api/testimonials/:id
 exports.getTestimonial = async (req, res, next) => {
   try {
     const testimonial = await Testimonial.findById(req.params.id).select('-__v');
@@ -35,7 +44,7 @@ exports.getTestimonial = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// Public review submission — allows multiple images/videos
+// POST /api/testimonials  (public submission — pending approval)
 exports.createTestimonial = async (req, res, next) => {
   try {
     const { name, profession, review, rating, project } = req.body;
@@ -47,24 +56,32 @@ exports.createTestimonial = async (req, res, next) => {
       resourceType: file.mimetype.startsWith('video/') ? 'video' : 'image',
     }));
 
-    // Legacy single image field — first image
-    const firstImage = files.find(f => f.mimetype.startsWith('image/'));
+    const firstImage = files.find(f => !f.mimetype.startsWith('video/'));
     const image = firstImage
       ? { url: firstImage.path, publicId: firstImage.filename }
       : { url: null, publicId: null };
 
     const testimonial = await Testimonial.create({
-      name, profession: profession || '', review,
-      rating: Number(rating), image, media,
-      project: project || null,
+      name,
+      profession: profession || '',
+      review,
+      rating:     Number(rating),
+      image,
+      media,
+      project:    project || null,
       isApproved: false,
     });
 
-    sendResponse(res, 201, 'Thank you! Your testimonial has been submitted and is pending review.', { id: testimonial._id });
+    sendResponse(
+      res,
+      201,
+      'Thank you! Your testimonial has been submitted and is pending review.',
+      { id: testimonial._id },
+    );
   } catch (err) { next(err); }
 };
 
-// Admin create — live immediately
+// POST /api/testimonials/admin-create  (admin — published immediately)
 exports.createTestimonialAsAdmin = async (req, res, next) => {
   try {
     const { name, profession, review, rating, project } = req.body;
@@ -76,15 +93,19 @@ exports.createTestimonialAsAdmin = async (req, res, next) => {
       resourceType: file.mimetype.startsWith('video/') ? 'video' : 'image',
     }));
 
-    const firstImage = files.find(f => f.mimetype.startsWith('image/'));
+    const firstImage = files.find(f => !f.mimetype.startsWith('video/'));
     const image = firstImage
       ? { url: firstImage.path, publicId: firstImage.filename }
       : { url: null, publicId: null };
 
     const testimonial = await Testimonial.create({
-      name, profession: profession || '', review,
-      rating: Number(rating), image, media,
-      project: project || null,
+      name,
+      profession: profession || '',
+      review,
+      rating:     Number(rating),
+      image,
+      media,
+      project:    project || null,
       isApproved: true,
     });
 
@@ -92,6 +113,7 @@ exports.createTestimonialAsAdmin = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// PUT /api/testimonials/:id  (admin)
 exports.updateTestimonial = async (req, res, next) => {
   try {
     const testimonial = await Testimonial.findById(req.params.id);
@@ -100,7 +122,6 @@ exports.updateTestimonial = async (req, res, next) => {
     const { name, profession, review, rating, isApproved, isFeatured, removeMedia } = req.body;
     const files = req.files || (req.file ? [req.file] : []);
 
-    // Handle media removal
     let existingMedia = testimonial.media || [];
     if (removeMedia) {
       const toRemove = Array.isArray(removeMedia) ? removeMedia : [removeMedia];
@@ -116,7 +137,7 @@ exports.updateTestimonial = async (req, res, next) => {
 
     const allMedia = [...existingMedia, ...newMedia];
 
-    const firstImage = allMedia.find(m => m.resourceType === 'image') || testimonial.image;
+    const firstImage = allMedia.find(m => m.resourceType === 'image');
     const image = firstImage
       ? { url: firstImage.url, publicId: firstImage.publicId }
       : testimonial.image;
@@ -133,13 +154,14 @@ exports.updateTestimonial = async (req, res, next) => {
         image,
         media: allMedia,
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     sendResponse(res, 200, 'Testimonial updated successfully', updated);
   } catch (err) { next(err); }
 };
 
+// DELETE /api/testimonials/:id  (admin)
 exports.deleteTestimonial = async (req, res, next) => {
   try {
     const testimonial = await Testimonial.findById(req.params.id);
