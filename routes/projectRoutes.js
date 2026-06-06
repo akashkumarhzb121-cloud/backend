@@ -9,7 +9,6 @@ const { createUploader } = require('../config/cloudinary');
 const router = express.Router();
 const upload = createUploader('projects');
 
-// Validation for the metadata fields
 const projectValidation = [
   body('title').trim().notEmpty().withMessage('Title is required').isLength({ max: 200 }),
   body('description').trim().notEmpty().withMessage('Description is required'),
@@ -20,15 +19,11 @@ const projectValidation = [
 
 // ── Public ────────────────────────────────────────────────────────────────────
 router.get('/', projectController.getAllProjects);
-router.get('/:id', projectController.getProject);
 
 // ── Admin only ────────────────────────────────────────────────────────────────
+// IMPORTANT: These specific named routes MUST come before GET /:id
+// Otherwise Express matches "upload-signature" as the :id param → 400 "Invalid _id" error
 router.use(protect, restrictTo('admin', 'superadmin'));
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NEW: Direct-upload flow (browser → Cloudinary → these endpoints)
-//      Bypasses Vercel's 4.5 MB body limit entirely.
-// ─────────────────────────────────────────────────────────────────────────────
 
 // Step 1 — get a signed upload signature so the browser can upload directly
 router.get('/upload-signature', projectController.getUploadSignature);
@@ -48,11 +43,7 @@ router.put(
   projectController.updateProjectUrls,
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LEGACY: Old multer / file-in-body routes — kept for local dev & backward compat.
-//         These still work locally but will hit Vercel's 4.5 MB limit in prod
-//         for large files.  The frontend now uses the /save-urls routes instead.
-// ─────────────────────────────────────────────────────────────────────────────
+// Legacy multer routes (local dev only — hit Vercel 4.5 MB limit for large files)
 router.post(
   '/',
   upload.array('images'),
@@ -69,5 +60,8 @@ router.put(
 );
 
 router.delete('/:id', projectController.deleteProject);
+
+// ── Public GET /:id MUST be last — so named routes above are matched first ───
+router.get('/:id', projectController.getProject);
 
 module.exports = router;
