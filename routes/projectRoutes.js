@@ -20,9 +20,17 @@ const projectValidation = [
 // ── Public ────────────────────────────────────────────────────────────────────
 router.get('/', projectController.getAllProjects);
 
+// ── Public GET /:id — MUST be before router.use(protect, ...) ────────────────
+// If this route is placed after router.use(protect), Express applies the auth
+// middleware to it as well, causing unauthenticated visitors to get a 401,
+// which the axios interceptor then redirects to /admin/login.
+router.get('/:id', projectController.getProject);
+
 // ── Admin only ────────────────────────────────────────────────────────────────
-// IMPORTANT: These specific named routes MUST come before GET /:id
-// Otherwise Express matches "upload-signature" as the :id param → 400 "Invalid _id" error
+// IMPORTANT: The named routes below (upload-signature, save-urls) MUST be
+// registered after the public GET /:id above, but they are still matched
+// correctly because they are POST/PUT/DELETE — not GET — so there is no
+// conflict with GET /:id.
 router.use(protect, restrictTo('admin', 'superadmin'));
 
 // Step 1 — get a signed upload signature so the browser can upload directly
@@ -60,8 +68,5 @@ router.put(
 );
 
 router.delete('/:id', projectController.deleteProject);
-
-// ── Public GET /:id MUST be last — so named routes above are matched first ───
-router.get('/:id', projectController.getProject);
 
 module.exports = router;
