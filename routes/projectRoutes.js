@@ -20,23 +20,26 @@ const projectValidation = [
 // ── Public ────────────────────────────────────────────────────────────────────
 router.get('/', projectController.getAllProjects);
 
-// ── Public GET /:id — MUST be before router.use(protect, ...) ────────────────
-// If this route is placed after router.use(protect), Express applies the auth
-// middleware to it as well, causing unauthenticated visitors to get a 401,
-// which the axios interceptor then redirects to /admin/login.
+// ── Admin GET /upload-signature — MUST be before GET /:id ────────────────────
+// If registered after /:id, Express matches "upload-signature" as the :id param
+// → 400 "Invalid _id: upload-signature". We apply protect inline here so this
+// route stays admin-only while GET /:id below can remain fully public.
+router.get(
+  '/upload-signature',
+  protect,
+  restrictTo('admin', 'superadmin'),
+  projectController.getUploadSignature,
+);
+
+// ── Public GET /:id ───────────────────────────────────────────────────────────
+// No auth middleware — any visitor can view a project detail page without
+// being redirected to /admin/login.
 router.get('/:id', projectController.getProject);
 
-// ── Admin only ────────────────────────────────────────────────────────────────
-// IMPORTANT: The named routes below (upload-signature, save-urls) MUST be
-// registered after the public GET /:id above, but they are still matched
-// correctly because they are POST/PUT/DELETE — not GET — so there is no
-// conflict with GET /:id.
+// ── All routes below are admin-only ──────────────────────────────────────────
 router.use(protect, restrictTo('admin', 'superadmin'));
 
-// Step 1 — get a signed upload signature so the browser can upload directly
-router.get('/upload-signature', projectController.getUploadSignature);
-
-// Step 2a — create project with pre-uploaded Cloudinary URLs (JSON body, no files)
+// Create project with pre-uploaded Cloudinary URLs (JSON body, no files)
 router.post(
   '/save-urls',
   projectValidation,
@@ -44,7 +47,7 @@ router.post(
   projectController.saveProjectUrls,
 );
 
-// Step 2b — update project with pre-uploaded Cloudinary URLs (JSON body, no files)
+// Update project with pre-uploaded Cloudinary URLs (JSON body, no files)
 router.put(
   '/:id/save-urls',
   validate,
